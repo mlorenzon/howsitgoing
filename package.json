@@ -1,0 +1,23 @@
+{
+  "name": "howsitgoing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "fetch-co2": "node scripts/fetch-co2.mjs",
+    "fetch-gini": "node scripts/fetch-gini.mjs",
+    "fetch-all": "node scripts/fetch-co2.mjs && node scripts/fetch-gini.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.10"
+  }
+}
