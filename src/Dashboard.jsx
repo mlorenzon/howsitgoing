@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -64,32 +64,31 @@ const HOUSING_DATA = [
 
 const EXPLANATIONS = {
   co2: {
-    text: "CO₂ is the primary long-lived greenhouse gas. Its concentration at Mauna Loa has risen without interruption since modern records began in 1958 — no annual mean has ever been lower than the year before it. Pre-industrial levels were roughly 280 ppm. The IPCC broadly associates 450 ppm with approximately 2°C of warming above pre-industrial temperatures.",
+    text: "CO₂ is the primary long-lived greenhouse gas. Its concentration at Mauna Loa has risen without interruption since modern records began in 1958. No annual mean has ever been lower than the year before it. Pre-industrial levels were roughly 280 ppm. The IPCC broadly associates 450 ppm with approximately 2°C of warming above pre-industrial temperatures.",
     source: "NOAA Global Monitoring Laboratory · gml.noaa.gov/ccgg/trends/",
   },
   incomeGini: {
-    text: "The Gini coefficient measures inequality on a 0–100 scale: 0 means everyone has identical income; 100 means one person has it all. This figure uses post-tax, post-transfer disposable income — so it already reflects welfare payments and progressive taxation. Australia's score of ~32 is more equal than the US (~41) but less equal than Nordic countries (~27). The World Bank surveys household income every few years; inter-survey years use ABS/HILDA estimates.",
+    text: "The Gini coefficient measures inequality on a 0–100 scale: 0 means everyone has identical income, 100 means one person has it all. This figure uses post-tax, post-transfer disposable income, so it already reflects welfare payments and progressive taxation. Australia's score of around 32 is more equal than the US (around 41) but less equal than Nordic countries (around 27). The World Bank surveys household income every few years; inter-survey years use ABS/HILDA estimates.",
     source: "World Bank SI.POV.GINI · data.worldbank.org · ABS Cat. 6523.0",
   },
   wealthGini: {
-    text: "Same 0–100 Gini scale as income inequality, but applied to net worth (all assets minus all debts). Wealth inequality is structurally much higher than income inequality because assets — especially property and shares — compound over time and concentrate among older, higher-income households. Australia's wealth Gini of ~65 reflects the outsized role of residential property values. Published annually by UBS (formerly Credit Suisse) in the Global Wealth Report.",
+    text: "Same 0–100 Gini scale as income inequality, but applied to net worth (all assets minus all debts). Wealth inequality is structurally much higher than income inequality because assets, especially property and shares, compound over time and concentrate among older, higher-income households. Australia's wealth Gini of around 65 reflects the outsized role of residential property values. Published annually by UBS (formerly Credit Suisse) in the Global Wealth Report.",
     source: "UBS Global Wealth Report (formerly Credit Suisse) · ABS/HILDA Survey (pre-2010)",
   },
   housing: {
-    text: "The median dwelling price across Australia's eight capital cities divided by average full-time annual earnings. A ratio of 3× was typical in the 1980s; Demographia's international survey classifies anything above 5× as 'severely unaffordable'. At 9×, buying a median home requires nine full years of average salary — before interest costs or saving time. No public REST API exists for this data; it is compiled manually from ABS earnings and property price releases.",
+    text: "The median dwelling price across Australia's eight capital cities divided by average full-time annual earnings. A ratio of 3× was typical in the 1980s; Demographia's international survey classifies anything above 5× as 'severely unaffordable'. At 9×, buying a median home requires nine full years of average salary before interest costs or saving time. No public REST API exists for this data; it is compiled manually from ABS earnings and property price releases.",
     source: "ABS Cat. 6302.0 (Average Weekly Earnings) · ABS Cat. 6416.0 (Residential Property Price Indexes)",
   },
 };
 
 // ── Traffic light ─────────────────────────────────────────────────────────────
-// higher = worse for all four metrics (CO₂ ppm, Gini, Wealth Gini, price-to-income)
+// Higher = worse for all four metrics (CO₂ ppm, Gini, Wealth Gini, price-to-income).
 
 function computeStatus(data, dataKey) {
   if (!data || data.length < 6) return null;
   const last     = data.at(-1)?.[dataKey];
   const first    = data[0]?.[dataKey];
   const lastYear = data.at(-1)?.year;
-  // Nearest point ~5 years back
   const shortRef = (
     data.find(d => d.year === lastYear - 5) ||
     data.find(d => d.year === lastYear - 4) ||
@@ -100,273 +99,206 @@ function computeStatus(data, dataKey) {
   const longBad  = last > first;
   const shortBad = last > shortRef;
 
-  if (longBad  && shortBad)  return { key: 'red',    label: 'Worsening', detail: 'Getting worse both long-term and recently' };
-  if (!longBad && !shortBad) return { key: 'green',  label: 'Improving', detail: 'Getting better both long-term and recently' };
+  if (longBad  && shortBad)  return { key: 'red',   label: 'Worsening', detail: 'Worse long-term and recently' };
+  if (!longBad && !shortBad) return { key: 'green', label: 'Improving', detail: 'Better long-term and recently' };
   return longBad
-    ? { key: 'orange', label: 'Mixed', detail: 'Worse long-term, but improving recently' }
-    : { key: 'orange', label: 'Mixed', detail: 'Better long-term, but worsening recently' };
+    ? { key: 'amber', label: 'Mixed', detail: 'Worse long-term, improving recently' }
+    : { key: 'amber', label: 'Mixed', detail: 'Better long-term, worsening recently' };
 }
 
-const STATUS_COLOR = { red: '#ef4444', orange: '#f97316', green: '#22c55e' };
+const ACCENT_CLASS = { red: 'accent-red', amber: 'accent-amber', green: 'accent-green' };
+const ACCENT_VAR   = { red: 'var(--red)', amber: 'var(--amber)', green: 'var(--green)' };
+const ACCENT_SOFT  = { red: 'var(--red-soft)', amber: 'var(--amber-soft)', green: 'var(--green-soft)' };
 
-function TrafficBadge({ data, dataKey }) {
-  const s = computeStatus(data, dataKey);
-  if (!s) return null;
-  const c = STATUS_COLOR[s.key];
-  return (
-    <div title={s.detail} style={{
-      display: 'inline-flex', alignItems: 'center', gap: '5px',
-      fontFamily: "'JetBrains Mono', monospace",
-      fontSize: '10px', padding: '3px 9px', borderRadius: '20px',
-      border: `1px solid ${c}40`, color: c, background: `${c}09`,
-      letterSpacing: '0.05em', cursor: 'default', userSelect: 'none',
-    }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: c, display: 'inline-block', flexShrink: 0,
-        boxShadow: `0 0 5px ${c}88`,
-      }} />
-      {s.label}
-    </div>
-  );
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmt(v, decimals = 2) {
+  if (v == null || isNaN(v)) return '—';
+  return v.toFixed(decimals);
+}
+
+function ageLabel(updatedAt) {
+  if (!updatedAt) return null;
+  const days = Math.floor((Date.now() - updatedAt) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label, unit, prefix }) {
+function ChartTip({ active, payload, label, unit, prefix }) {
   if (!active || !payload?.length) return null;
-  const val = payload[0]?.value;
+  const v = payload[0]?.value;
   return (
-    <div style={{
-      background: "#050810", border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: "8px", padding: "10px 14px",
-      fontFamily: "'JetBrains Mono', monospace",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-    }}>
-      <div style={{ color: "#475569", fontSize: "11px", marginBottom: "3px" }}>{label}</div>
-      <div style={{ color: "#f1f5f9", fontSize: "18px", fontWeight: 700 }}>
-        {prefix || ""}{typeof val === "number" ? val.toFixed(2) : val}{unit}
+    <div className="tip">
+      <div className="tip-year">{label}</div>
+      <div className="tip-val">
+        {prefix || ''}{typeof v === 'number' ? v.toFixed(2) : v}{unit || ''}
       </div>
     </div>
   );
 }
 
-// ── Delta badge ───────────────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────────────────────
 
-function DeltaBadge({ first, last, unit, color, sinceYear }) {
-  if (first == null || last == null) return null;
-  const delta = last - first;
-  const pct   = ((delta / first) * 100).toFixed(1);
-  const sign  = delta >= 0 ? "+" : "";
-  return (
-    <div style={{
-      display: "inline-flex", alignItems: "center", gap: "4px",
-      background: `${color}18`, border: `1px solid ${color}30`,
-      borderRadius: "20px", padding: "2px 8px",
-      fontFamily: "'JetBrains Mono', monospace", fontSize: "11px", color,
-    }}>
-      {delta >= 0 ? "▲" : "▼"} {sign}{delta.toFixed(2)}{unit} since {sinceYear ?? 2004}
-      <span style={{ opacity: 0.6 }}>({sign}{pct}%)</span>
-    </div>
-  );
-}
-
-// ── Updated-at badge ──────────────────────────────────────────────────────────
-
-function UpdatedBadge({ updatedAt, maxAgeMs }) {
-  if (!updatedAt) return null;
-  const days  = Math.floor((Date.now() - updatedAt) / 86_400_000);
-  const stale = Date.now() - updatedAt > maxAgeMs;
-  const label = days === 0 ? "today" : days === 1 ? "yesterday" : `${days}d ago`;
-  return (
-    <span style={{
-      fontFamily: "'JetBrains Mono', monospace",
-      fontSize: "9px", color: stale ? "#f87171" : "#334155", marginLeft: "6px",
-    }}>
-      data {label}
-    </span>
-  );
-}
-
-// ── Info section ──────────────────────────────────────────────────────────────
-
-function InfoSection({ text, source }) {
-  return (
-    <div style={{
-      marginTop: "14px", padding: "14px 16px 12px",
-      background: "rgba(255,255,255,0.02)",
-      borderRadius: "10px", border: "1px solid rgba(255,255,255,0.055)",
-    }}>
-      <p style={{
-        fontFamily: "'Barlow', sans-serif", fontSize: "12px",
-        color: "#4b6583", margin: "0 0 10px", lineHeight: 1.65,
-      }}>{text}</p>
-      <p style={{
-        fontFamily: "'JetBrains Mono', monospace", fontSize: "10px",
-        color: "#263750", margin: 0,
-      }}>Source: {source}</p>
-    </div>
-  );
-}
-
-// ── Chart panel ───────────────────────────────────────────────────────────────
-
-function Panel({
-  title, subtitle, note, data, dataKey, unit, prefix, color, gradId,
-  domain, ticks, yticks, refLine, source, isLive, loading,
-  lastValue, firstValue, sinceYear, updatedAt, maxAgeMs, explanation,
+function Card({
+  title, subtitle, note, source, explanation,
+  data, dataKey, unit, prefix,
+  domain, ticks, yticks, refLine,
+  isLive, loading, updatedAt, maxAgeMs,
 }) {
   const [showInfo, setShowInfo] = useState(false);
+  const status = useMemo(() => computeStatus(data, dataKey), [data, dataKey]);
+  const accentClass = status ? ACCENT_CLASS[status.key] : 'accent-ink';
+  const accentVar = status ? ACCENT_VAR[status.key] : 'var(--ink-soft)';
+
+  const last = data.at(-1)?.[dataKey];
+  const first = data[0]?.[dataKey];
+  const delta = (last != null && first != null) ? last - first : null;
+  const pct   = (delta != null && first) ? (delta / first) * 100 : null;
+  const gradId = `grad-${title.replace(/\W/g, '')}`;
+
+  const lastYear = data.at(-1)?.year;
+  const firstYear = data[0]?.year;
+  const stale = isLive && updatedAt && maxAgeMs && (Date.now() - updatedAt > maxAgeMs);
+  const age = ageLabel(updatedAt);
 
   return (
-    <div style={{
-      background: "linear-gradient(160deg, #0b1120 0%, #080d18 100%)",
-      border: "1px solid rgba(255,255,255,0.055)",
-      borderRadius: "18px", padding: "28px 28px 20px",
-      marginBottom: "20px", position: "relative", overflow: "hidden",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: "2px",
-        background: `linear-gradient(90deg, ${color}dd, ${color}44, transparent)`,
-      }} />
-      <div style={{
-        position: "absolute", top: "-40px", right: "-40px",
-        width: "160px", height: "160px",
-        background: `radial-gradient(circle, ${color}0a 0%, transparent 70%)`,
-        pointerEvents: "none",
-      }} />
+    <article className={`card ${accentClass}`}>
+      <div className="card-rule"></div>
+      <div className="card-body">
 
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{
-            fontFamily: "'Barlow', sans-serif", fontSize: "16px", fontWeight: 700,
-            color: "#e2e8f0", margin: 0, letterSpacing: "-0.3px",
-          }}>{title}</h2>
-          <p style={{
-            fontFamily: "'Barlow', sans-serif", fontSize: "11px",
-            color: "#334155", margin: "4px 0 0", lineHeight: 1.4,
-          }}>{subtitle}</p>
+        <header className="card-head">
+          <div>
+            <h2>{title}</h2>
+            <p className="sub">{subtitle}</p>
+          </div>
+          <div className="pills">
+            <span className={`pill ${isLive ? 'pill-live' : 'pill-embed'}`}>
+              <span className="pdot"></span>
+              {isLive ? 'Live' : 'Embedded'}
+              {isLive && age && <span className={`age ${stale ? 'stale' : ''}`}>{age}</span>}
+            </span>
+            {!loading && status && (
+              <span className="pill pill-status" title={status.detail}>
+                <span className="pdot"></span>
+                {status.label}
+              </span>
+            )}
+          </div>
+        </header>
+
+        <div className="value-row">
+          <div className="value">
+            {loading
+              ? <span className="skeleton" style={{ width: 120 }}></span>
+              : <>{prefix || ''}{fmt(last, 2)}<span className="unit">{unit}</span></>
+            }
+          </div>
+          {!loading && delta != null && (
+            <span className="delta" title={`Change since ${firstYear}`}>
+              {delta >= 0 ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{fmt(delta, 2)}{unit}
+              <span className="pct">({delta >= 0 ? '+' : ''}{fmt(pct, 1)}% since {firstYear})</span>
+            </span>
+          )}
         </div>
 
-        {/* Right column: badges + value */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0, marginLeft: "16px" }}>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {/* Live / Embedded badge */}
-            <div style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: "10px",
-              padding: "3px 9px", borderRadius: "20px",
-              border: `1px solid ${isLive ? "rgba(52,211,153,0.35)" : "rgba(71,85,105,0.4)"}`,
-              color: isLive ? "#34d399" : "#475569",
-              background: isLive ? "rgba(52,211,153,0.06)" : "rgba(71,85,105,0.06)",
-              letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "5px",
-            }}>
-              <span style={{
-                width: "5px", height: "5px", borderRadius: "50%",
-                background: isLive ? "#34d399" : "#475569",
-                boxShadow: isLive ? "0 0 6px #34d399" : "none", display: "inline-block",
-              }} />
-              {isLive ? "LIVE" : "EMBEDDED"}
-              {isLive && <UpdatedBadge updatedAt={updatedAt} maxAgeMs={maxAgeMs} />}
-            </div>
-            {/* Traffic light */}
-            {!loading && <TrafficBadge data={data} dataKey={dataKey} />}
-          </div>
+        <div className="chart-wrap">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+              <defs>
+                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"  stopColor={accentVar} stopOpacity={0.30} />
+                  <stop offset="100%" stopColor={accentVar} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="2 4" vertical={false} />
+              <XAxis
+                dataKey="year"
+                ticks={ticks || [firstYear, firstYear+4, firstYear+8, firstYear+12, firstYear+16, lastYear]}
+                tickLine={false} axisLine={false}
+              />
+              <YAxis
+                domain={domain} ticks={yticks}
+                tickLine={false} axisLine={false} width={42}
+              />
+              <Tooltip
+                content={(p) => <ChartTip {...p} unit={unit} prefix={prefix} />}
+                cursor={{ stroke: 'var(--ink-faint)', strokeDasharray: '3 3' }}
+              />
+              {refLine && (
+                <ReferenceLine
+                  y={refLine.y}
+                  strokeDasharray="4 4"
+                  label={{ value: refLine.label, position: 'insideTopRight', fontSize: 10 }}
+                />
+              )}
+              <Area
+                type="monotone" dataKey={dataKey}
+                stroke={accentVar} strokeWidth={2.25}
+                fill={`url(#${gradId})`}
+                dot={false}
+                activeDot={{ r: 4.5, fill: accentVar, stroke: '#fff', strokeWidth: 2 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
 
-          {/* Current value */}
-          <div style={{
-            fontFamily: "'JetBrains Mono', monospace", fontSize: "30px", fontWeight: 700,
-            color: loading ? "#1e293b" : color, lineHeight: 1, textAlign: "right",
-            textShadow: `0 0 30px ${color}55`, transition: "color 0.3s",
-          }}>
-            {loading ? "···" : `${prefix || ""}${lastValue?.toFixed(2)}${unit}`}
+        <div className="card-foot">
+          <p className="note">{note}</p>
+          <div className="foot-meta">
+            <span className="src">{source}</span>
+            {explanation && (
+              <button
+                className="info-btn"
+                aria-expanded={showInfo}
+                aria-label={showInfo ? 'Hide explanation' : 'Show explanation'}
+                onClick={() => setShowInfo(v => !v)}
+              >
+                {showInfo ? '×' : '?'}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Delta */}
-      {!loading && firstValue != null && (
-        <div style={{ marginBottom: "14px" }}>
-          <DeltaBadge first={firstValue} last={lastValue} unit={unit} color={color} sinceYear={sinceYear} />
-        </div>
-      )}
-
-      {/* Chart */}
-      <ResponsiveContainer width="100%" height={190}>
-        <AreaChart data={data} margin={{ top: 5, right: 2, left: -8, bottom: 0 }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-          <XAxis
-            dataKey="year"
-            ticks={ticks || [2004, 2008, 2012, 2016, 2020, 2024]}
-            tick={{ fill: "#1e3a5f", fontSize: 10, fontFamily: "'JetBrains Mono', monospace" }}
-            tickLine={false} axisLine={false}
-          />
-          <YAxis
-            domain={domain} ticks={yticks}
-            tick={{ fill: "#1e3a5f", fontSize: 10, fontFamily: "'JetBrains Mono', monospace" }}
-            tickLine={false} axisLine={false} width={42}
-          />
-          <Tooltip content={(p) => <ChartTooltip {...p} unit={unit} prefix={prefix} />} />
-          {refLine && (
-            <ReferenceLine
-              y={refLine.y} stroke="rgba(255,255,255,0.1)" strokeDasharray="5 5"
-              label={{ value: refLine.label, fill: "#2d4a6b", fontSize: 9, position: "insideTopRight", fontFamily: "'JetBrains Mono', monospace" }}
-            />
-          )}
-          <Area
-            type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2}
-            fill={`url(#${gradId})`} dot={false}
-            activeDot={{ r: 4, fill: color, stroke: "#080d18", strokeWidth: 2 }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-
-      {/* Footer */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px" }}>
-        <p style={{ fontFamily: "'Barlow', sans-serif", fontSize: "10px", color: "#172033", margin: 0, maxWidth: "65%" }}>
-          {note}
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "#172033", margin: 0, textAlign: "right" }}>
-            {source}
-          </p>
-          {explanation && (
-            <button
-              onClick={() => setShowInfo(v => !v)}
-              title={showInfo ? "Hide explanation" : "What is this?"}
-              style={{
-                background: showInfo ? "rgba(255,255,255,0.06)" : "none",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "50%", width: "20px", height: "20px",
-                color: showInfo ? "#94a3b8" : "#334155",
-                cursor: "pointer", fontSize: "11px", lineHeight: "18px",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0, padding: 0, transition: "all 0.15s",
-              }}
-            >
-              {showInfo ? "×" : "?"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Expandable info */}
       {showInfo && explanation && (
-        <InfoSection text={explanation.text} source={explanation.source} />
+        <div className="info-panel">
+          <p>{explanation.text}</p>
+          <p className="src-line">Source · {explanation.source}</p>
+        </div>
       )}
+    </article>
+  );
+}
+
+// ── Summary strip cell ────────────────────────────────────────────────────────
+
+function SummaryCell({ label, data, dataKey, unit, prefix }) {
+  const status = computeStatus(data, dataKey);
+  const last = data.at(-1)?.[dataKey];
+  const color = status ? ACCENT_VAR[status.key] : 'var(--ink-faint)';
+  const halo = status ? ACCENT_SOFT[status.key] : 'transparent';
+  return (
+    <div className="summary-cell">
+      <span className="label">{label}</span>
+      <div className="dot-row">
+        <span className="dot" style={{ background: color, '--dot-halo': halo }}></span>
+        <span className="status">{status?.label || '—'}</span>
+      </div>
+      <span className="value-mono">
+        {prefix || ''}{fmt(last, 2)}{unit}
+      </span>
     </div>
   );
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
-const WEEK_MS = 7  * 24 * 60 * 60 * 1000;
+const WEEK_MS = 7   * 24 * 60 * 60 * 1000;
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
 async function fetchCo2Live() {
@@ -429,129 +361,85 @@ function useDataSource(localPath, fetchLive, fallback, maxAgeMs) {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [fontsReady, setFontsReady] = useState(false);
-
-  useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow:wght@400;600;700;800&display=swap";
-    link.onload = () => setFontsReady(true);
-    document.head.appendChild(link);
-    return () => document.head.removeChild(link);
-  }, []);
-
   const co2  = useDataSource("/data/co2.json",  fetchCo2Live,  CO2_FALLBACK,  WEEK_MS);
   const gini = useDataSource("/data/gini.json", fetchGiniLive, GINI_FALLBACK, YEAR_MS);
 
-  const lastCo2     = co2.data.at(-1)?.value;
-  const lastGini    = gini.data.at(-1)?.value;
-  const lastWealth  = WEALTH_GINI_DATA.at(-1)?.value;
-  const lastHousing = HOUSING_DATA.at(-1)?.ratio;
+  const currentYear = new Date().getFullYear();
+  const co2LastYear = co2.data.at(-1)?.year ?? 2024;
 
   return (
-    <div style={{
-      minHeight: "100vh", background: "#060910",
-      padding: "36px 20px 48px",
-      backgroundImage: "radial-gradient(rgba(255,255,255,0.018) 1px, transparent 1px)",
-      backgroundSize: "28px 28px",
-      fontFamily: fontsReady ? "'Barlow', sans-serif" : "system-ui, sans-serif",
-    }}>
-      <div style={{ maxWidth: "740px", margin: "0 auto" }}>
+    <div className="shell">
+      <header className="masthead">
+        <div className="eyebrow">Global indicators · 2004 to {currentYear}</div>
+        <h1>How's it <em>going?</em></h1>
+        <p className="lede">
+          A 20-year read on whether we're making progress. Four longitudinal metrics across climate, inequality and affordability, each scored at a glance against its own trajectory.
+        </p>
+      </header>
 
-        {/* Header */}
-        <div style={{ marginBottom: "40px" }}>
-          <div style={{
-            fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", color: "#1a3050",
-            letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: "10px",
-          }}>
-            GLOBAL INDICATORS · 2004 – {new Date().getFullYear()}
-          </div>
-          <h1 style={{
-            fontFamily: "'Barlow', sans-serif",
-            fontSize: "clamp(24px, 5vw, 36px)", fontWeight: 800,
-            color: "#e2e8f0", margin: 0, letterSpacing: "-0.5px", lineHeight: 1.1,
-          }}>
-            How&rsquo;s It Going?
-          </h1>
-          <p style={{ color: "#243552", marginTop: "8px", fontSize: "13px" }}>
-            Atmospheric CO₂ · Australian Inequality (Income &amp; Wealth) · Housing Affordability
-          </p>
-        </div>
+      <section className="summary" aria-label="At-a-glance summary">
+        <SummaryCell label="Atmospheric CO₂"        data={co2.data}     dataKey="value" unit=" ppm" />
+        <SummaryCell label="Income inequality"     data={gini.data}    dataKey="value" unit="" />
+        <SummaryCell label="Wealth inequality"     data={WEALTH_GINI_DATA}  dataKey="value" unit="" />
+        <SummaryCell label="Housing affordability" data={HOUSING_DATA} dataKey="ratio" unit="×" />
+      </section>
 
-        {/* CO₂ */}
-        <Panel
+      <section className="grid">
+        <Card
           title="Atmospheric CO₂"
-          subtitle="Mauna Loa Observatory, Hawaiʻi · NOAA Global Monitoring Laboratory · Annual mean concentration"
-          note="Keeling Curve. 400 ppm exceeded on annual basis from 2015. No year-on-year decline recorded in the modern record."
-          data={co2.data} dataKey="value" unit=" ppm"
-          color="#f87171" gradId="gradCo2"
-          domain={[370, 435]} yticks={[380, 390, 400, 410, 420, 430]}
-          ticks={[2004, 2008, 2012, 2016, 2020, co2.data.at(-1)?.year ?? 2024]}
-          refLine={{ y: 400, label: "400 ppm (2015)" }}
+          subtitle="Mauna Loa Observatory · NOAA · annual mean concentration"
+          note="Keeling Curve. 400 ppm exceeded annually from 2015. No year-on-year decline on record."
           source="NOAA GML"
-          isLive={co2.isLive} loading={co2.loading}
-          lastValue={lastCo2} firstValue={co2.data[0]?.value}
-          updatedAt={co2.updatedAt} maxAgeMs={WEEK_MS}
           explanation={EXPLANATIONS.co2}
+          data={co2.data} dataKey="value" unit=" ppm"
+          domain={[370, 435]} yticks={[380, 395, 410, 425]}
+          ticks={[2004, 2009, 2014, 2019, co2LastYear]}
+          refLine={{ y: 400, label: '400 ppm (2015)' }}
+          isLive={co2.isLive} loading={co2.loading}
+          updatedAt={co2.updatedAt} maxAgeMs={WEEK_MS}
         />
-
-        {/* Income Gini */}
-        <Panel
-          title="Income Inequality — Australia"
-          subtitle="Gini coefficient · Post-tax, post-transfer disposable household income · World Bank / ABS HILDA Survey"
-          note="World Bank survey data merged with ABS interpolation for inter-survey years. Lower = more equal."
-          data={gini.data} dataKey="value" unit=""
-          color="#fbbf24" gradId="gradGini"
-          domain={[30, 36]} yticks={[30, 31, 32, 33, 34, 35, 36]}
+        <Card
+          title="Income inequality, Australia"
+          subtitle="Gini · post-tax disposable household income · World Bank + ABS"
+          note="World Bank survey merged with ABS estimates for inter-survey years. Lower means more equal."
           source="World Bank + ABS"
-          isLive={gini.isLive} loading={gini.loading}
-          lastValue={lastGini} firstValue={gini.data[0]?.value}
-          updatedAt={gini.updatedAt} maxAgeMs={YEAR_MS}
           explanation={EXPLANATIONS.incomeGini}
+          data={gini.data} dataKey="value"
+          domain={[30, 36]} yticks={[30, 32, 34, 36]}
+          ticks={[2004, 2008, 2012, 2016, 2020, 2023]}
+          isLive={gini.isLive} loading={gini.loading}
+          updatedAt={gini.updatedAt} maxAgeMs={YEAR_MS}
         />
-
-        {/* Wealth Gini */}
-        <Panel
-          title="Wealth Inequality — Australia"
-          subtitle="Gini coefficient · Net worth (all assets minus liabilities, incl. property) · UBS Global Wealth Report"
-          note="Wealth Gini is structurally ~2× the income Gini because assets compound and concentrate far faster than wages."
-          data={WEALTH_GINI_DATA} dataKey="value" unit=""
-          color="#f472b6" gradId="gradWealthGini"
-          domain={[55, 72]} yticks={[55, 58, 61, 64, 67, 70]}
-          refLine={{ y: 59.8, label: "2004 baseline 59.8" }}
+        <Card
+          title="Wealth inequality, Australia"
+          subtitle="Gini · net worth incl. property · UBS Global Wealth Report"
+          note="Wealth Gini is structurally about 2× income Gini. Assets compound and concentrate faster than wages."
           source="UBS Global Wealth Report"
-          isLive={false} loading={false}
-          lastValue={lastWealth} firstValue={WEALTH_GINI_DATA[0]?.value}
-          updatedAt={null} maxAgeMs={YEAR_MS}
           explanation={EXPLANATIONS.wealthGini}
-        />
-
-        {/* Housing */}
-        <Panel
-          title="Housing Affordability — Australia"
-          subtitle="Median dwelling price (8 capital cities, weighted) ÷ Average full-time annual earnings · ABS"
-          note="COVID-era zero-rate surge (2021) drove ratio to near-record 9.8× in 2022. Demographia classifies above 5× as 'severely unaffordable'."
-          data={HOUSING_DATA} dataKey="ratio" unit="×"
-          color="#a78bfa" gradId="gradHousing"
-          domain={[5, 11]} yticks={[5, 6, 7, 8, 9, 10, 11]}
-          refLine={{ y: 3, label: "3× (historic norm)" }}
-          source="ABS Cat. 6302.0 & 6416.0"
+          data={WEALTH_GINI_DATA} dataKey="value"
+          domain={[55, 72]} yticks={[58, 62, 66, 70]}
+          ticks={[2004, 2008, 2012, 2016, 2020, 2023]}
+          refLine={{ y: 59.8, label: '2004 baseline' }}
           isLive={false} loading={false}
-          lastValue={lastHousing} firstValue={HOUSING_DATA[0]?.ratio}
-          updatedAt={null} maxAgeMs={YEAR_MS}
-          explanation={EXPLANATIONS.housing}
         />
+        <Card
+          title="Housing affordability, Australia"
+          subtitle="Median dwelling price ÷ average full-time annual earnings · ABS"
+          note="Demographia classifies above 5× as 'severely unaffordable'. COVID-era surge drove the ratio near 10×."
+          source="ABS Cat. 6302.0 & 6416.0"
+          explanation={EXPLANATIONS.housing}
+          data={HOUSING_DATA} dataKey="ratio" unit="×"
+          domain={[5, 11]} yticks={[5, 7, 9, 11]}
+          ticks={[2004, 2008, 2012, 2016, 2020, 2024]}
+          refLine={{ y: 3, label: '3× historic norm' }}
+          isLive={false} loading={false}
+        />
+      </section>
 
-        {/* Footer */}
-        <div style={{ textAlign: "center", marginTop: "8px" }}>
-          <p style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: "10px", color: "#131e30", letterSpacing: "0.05em",
-          }}>
-            CO₂ refreshed weekly · Gini refreshed annually · Tap ? on any chart for sources and methodology
-          </p>
-        </div>
-      </div>
+      <footer className="colophon">
+        <span>CO₂ refreshed weekly · Gini refreshed annually</span>
+        <span>Tap <strong>?</strong> on any card for sources and methodology</span>
+      </footer>
     </div>
   );
 }
