@@ -370,7 +370,7 @@ export default function Dashboard() {
   return (
     <div className="shell">
       <header className="masthead">
-        <div className="eyebrow">Global indicators · 2004 to {currentYear}</div>
+        <div className="eyebrow">Australian indicators · 2004 to {currentYear}</div>
         <h1>How's it <em>going?</em></h1>
         <p className="lede">
           A 20-year read on whether we're making progress. Four longitudinal metrics across climate, inequality and affordability, each scored at a glance against its own trajectory.
