@@ -67,6 +67,10 @@ const EXPLANATIONS = {
     text: "CO₂ is the primary long-lived greenhouse gas. Its concentration at Mauna Loa has risen without interruption since modern records began in 1958. No annual mean has ever been lower than the year before it. Pre-industrial levels were roughly 280 ppm. The IPCC broadly associates 450 ppm with approximately 2°C of warming above pre-industrial temperatures.",
     source: "NOAA Global Monitoring Laboratory · gml.noaa.gov/ccgg/trends/",
   },
+  co2Growth: {
+    text: "This chart shows how much atmospheric CO₂ increased each year compared to the previous year. A declining trend — 'bending the curve' — would indicate slowing emissions growth. An increasing trend means acceleration. Pre-industrial growth was near zero; the current rate of ~2 ppm/yr is entirely human-caused. No year has ever recorded a net decline in annual mean concentration.",
+    source: "NOAA Global Monitoring Laboratory · gml.noaa.gov/ccgg/trends/",
+  },
   incomeGini: {
     text: "The Gini coefficient measures inequality on a 0–100 scale: 0 means everyone has identical income, 100 means one person has it all. This figure uses post-tax, post-transfer disposable income, so it already reflects welfare payments and progressive taxation. Australia's score of around 32 is more equal than the US (around 41) but less equal than Nordic countries (around 27). The World Bank surveys household income every few years; inter-survey years use ABS/HILDA estimates.",
     source: "World Bank SI.POV.GINI · data.worldbank.org · ABS Cat. 6523.0",
@@ -367,6 +371,14 @@ export default function Dashboard() {
   const currentYear = new Date().getFullYear();
   const co2LastYear = co2.data.at(-1)?.year ?? 2024;
 
+  const co2GrowthData = useMemo(() => {
+    const d = co2.data;
+    return d.slice(1).map((pt, i) => ({
+      year: pt.year,
+      growth: parseFloat((pt.value - d[i].value).toFixed(2)),
+    }));
+  }, [co2.data]);
+
   return (
     <div className="shell">
       <header className="masthead">
@@ -395,6 +407,18 @@ export default function Dashboard() {
           domain={[370, 435]} yticks={[380, 395, 410, 425]}
           ticks={[2004, 2009, 2014, 2019, co2LastYear]}
           refLine={{ y: 400, label: '400 ppm (2015)' }}
+          isLive={co2.isLive} loading={co2.loading}
+          updatedAt={co2.updatedAt} maxAgeMs={WEEK_MS}
+        />
+        <Card
+          title="CO₂ Annual Growth Rate"
+          subtitle="Year-on-year change in atmospheric concentration · Mauna Loa · NOAA"
+          note="'Bending the curve' means this line trending down. Rising means accelerating emissions. No year has seen a net decline."
+          source="NOAA GML"
+          explanation={EXPLANATIONS.co2Growth}
+          data={co2GrowthData} dataKey="growth" unit=" ppm/yr"
+          domain={[0, 4]} yticks={[1, 2, 3, 4]}
+          ticks={[2005, 2009, 2014, 2019, co2LastYear]}
           isLive={co2.isLive} loading={co2.loading}
           updatedAt={co2.updatedAt} maxAgeMs={WEEK_MS}
         />
