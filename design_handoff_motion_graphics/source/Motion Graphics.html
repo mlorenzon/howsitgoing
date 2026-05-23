@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How's It Going? — Motion Graphics</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background: #111;
+      width: 100%; height: 100vh;
+      overflow: hidden;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    #root { position: absolute; inset: 0; }
+
+    /* CAPTURE MODE: ?capture=1 in the URL — strips all chrome and forces
+       the canvas to render at native 1080×1920 in the top-left of the viewport
+       so a recorder (OBS, browser source, etc) gets a clean key. */
+    body.capture #root > div { background: transparent !important; }
+    body.capture .stage-chrome { display: none !important; }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="animations.jsx" data-presets="react"></script>
+  <script type="text/babel" src="tweaks-panel.jsx" data-presets="react"></script>
+  <script type="text/babel" src="motion-scenes.jsx" data-presets="react"></script>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect } = React;
+
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "background": "green",
+      "showSafeZone": false,
+      "showPreview": false,
+      "loop": true
+    }/*EDITMODE-END*/;
+
+    const BG_MAP = {
+      green:       '#00B140',
+      magenta:     '#ff00ff',
+      black:       '#000000',
+      transparent: 'transparent',
+      preview:     'transparent',
+    };
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+      // Capture-mode URL flag — strips chrome and forces 1:1 canvas
+      const isCapture = new URLSearchParams(location.search).get('capture') === '1';
+      useEffect(() => {
+        if (isCapture) document.body.classList.add('capture');
+      }, [isCapture]);
+
+      const bg = BG_MAP[t.background] || '#00B140';
+      const showPreview = t.background === 'preview';
+
+      return (
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <Stage
+            width={1080}
+            height={1920}
+            duration={TOTAL_DURATION}
+            background={bg}
+            fps={60}
+            loop={t.loop}
+            autoplay={true}
+            persistKey="howsitgoing-mg"
+          >
+            <PreviewOverlay enabled={showPreview} />
+            {SCENES.map(({ Comp, start, end }, i) => (
+              <Comp key={i} start={start} end={end} />
+            ))}
+            <SafeZoneGuides enabled={t.showSafeZone} />
+          </Stage>
+
+          {/* Tweaks panel — hides itself when toggled off from the toolbar */}
+          <TweaksPanel title="Tweaks" defaultOpen={false}>
+            <TweakSection title="Background">
+              <TweakRadio
+                label="Mode"
+                value={t.background}
+                onChange={(v) => setTweak('background', v)}
+                options={[
+                  { value: 'green',       label: 'Green key' },
+                  { value: 'transparent', label: 'Transparent' },
+                ]}
+              />
+              <TweakSelect
+                label="More options"
+                value={t.background}
+                onChange={(v) => setTweak('background', v)}
+                options={[
+                  { value: 'green',       label: 'Chroma green (#00B140)' },
+                  { value: 'magenta',     label: 'Chroma magenta (#ff00ff)' },
+                  { value: 'black',       label: 'Black (luma key)' },
+                  { value: 'transparent', label: 'Transparent' },
+                  { value: 'preview',     label: 'Preview over video frame' },
+                ]}
+              />
+            </TweakSection>
+
+            <TweakSection title="Playback">
+              <TweakToggle
+                label="Loop"
+                value={t.loop}
+                onChange={(v) => setTweak('loop', v)}
+              />
+              <TweakToggle
+                label="Show safe-zone guide"
+                value={t.showSafeZone}
+                onChange={(v) => setTweak('showSafeZone', v)}
+              />
+            </TweakSection>
+
+            <TweakSection title="Capture">
+              <div style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 11, color: '#aab0ba', lineHeight: 1.55,
+              }}>
+                Append <strong style={{color:'#f6f4ef'}}>?capture=1</strong> to the URL for clean output (no chrome) at 1080×1920.
+                <br/><br/>
+                Record at <strong style={{color:'#f6f4ef'}}>1080×1920</strong> in OBS / browser source.
+                Then key out the green in Premiere (Ultra Key) or After Effects (Keylight).
+                <br/><br/>
+                Total duration: <strong style={{color:'#f6f4ef'}}>{TOTAL_DURATION.toFixed(1)}s</strong>.
+              </div>
+              <TweakButton
+                label="Open clean capture view"
+                onClick={() => {
+                  const url = new URL(location.href);
+                  url.searchParams.set('capture', '1');
+                  window.open(url.toString(), '_blank');
+                }}
+              />
+            </TweakSection>
+          </TweaksPanel>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
