@@ -1,0 +1,23 @@
+{
+  "name": "hows-it-going-mg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion motion graphics for How's It Going? Instagram reel",
+  "scripts": {
+    "studio": "npx remotion studio src/index.ts",
+    "render:png": "npx remotion render src/index.ts HowsItGoing out/frame-%04d.png --image-format=png",
+    "render:mov": "npx remotion render src/index.ts HowsItGoing out/overlay.mov --codec=prores --prores-profile=4444"
+  },
+  "dependencies": {
+    "@remotion/cli": "4",
+    "@remotion/google-fonts": "4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.0.0"
+  }
+}
