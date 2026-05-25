@@ -152,7 +152,7 @@ function Card({
   title, subtitle, note, source, explanation,
   data, dataKey, unit, prefix,
   domain, ticks, yticks, refLine,
-  isLive, loading, updatedAt, maxAgeMs,
+  isLive, loading, updatedAt, maxAgeMs, dataNote,
 }) {
   const [showInfo, setShowInfo] = useState(false);
   const status = useMemo(() => computeStatus(data, dataKey), [data, dataKey]);
@@ -184,7 +184,10 @@ function Card({
             <span className={`pill ${isLive ? 'pill-live' : 'pill-embed'}`}>
               <span className="pdot"></span>
               {isLive ? 'Live' : 'Embedded'}
-              {isLive && age && <span className={`age ${stale ? 'stale' : ''}`}>{age}</span>}
+              {isLive && (dataNote
+                ? <span className={`age ${stale ? 'stale' : ''}`}>{dataNote}</span>
+                : age && <span className={`age ${stale ? 'stale' : ''}`}>{age}</span>
+              )}
             </span>
             {!loading && status && (
               <span className="pill pill-status" title={status.detail}>
@@ -409,6 +412,7 @@ export default function Dashboard() {
           refLine={{ y: 400, label: '400 ppm (2015)' }}
           isLive={co2.isLive} loading={co2.loading}
           updatedAt={co2.updatedAt} maxAgeMs={WEEK_MS}
+          dataNote={co2.data.at(-1)?.year ? `through ${co2.data.at(-1).year}` : null}
         />
         <Card
           title="CO₂ Annual Growth Rate"
@@ -421,6 +425,7 @@ export default function Dashboard() {
           ticks={[2005, 2009, 2014, 2019, co2LastYear]}
           isLive={co2.isLive} loading={co2.loading}
           updatedAt={co2.updatedAt} maxAgeMs={WEEK_MS}
+          dataNote={co2.data.at(-1)?.year ? `through ${co2.data.at(-1).year}` : null}
         />
         <Card
           title="Income inequality, Australia"
@@ -431,8 +436,7 @@ export default function Dashboard() {
           data={gini.data} dataKey="value"
           domain={[30, 36]} yticks={[30, 32, 34, 36]}
           ticks={[2004, 2008, 2012, 2016, 2020, 2023]}
-          isLive={gini.isLive} loading={gini.loading}
-          updatedAt={gini.updatedAt} maxAgeMs={YEAR_MS}
+          isLive={false} loading={gini.loading}
         />
         <Card
           title="Wealth inequality, Australia"
