@@ -361,6 +361,21 @@ body {
 }
 .colophon strong { color: var(--ink); }
 
+/* ── Cross-page nav ─────────────────────────────────────────────────────────── */
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.back-link:hover { color: var(--ink); }
+
 /* ── Volume Calculator ──────────────────────────────────────────────────────── */
 
 :root {
