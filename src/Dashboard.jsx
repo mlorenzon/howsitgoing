@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import VolumeCalculator from "./VolumeCalculator.jsx";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -458,6 +459,10 @@ export default function Dashboard() {
           refLine={{ y: 3, label: '3× historic norm' }}
           isLive={false} loading={false}
         />
+      </section>
+
+      <section className="grid" style={{ marginTop: 24 }}>
+        <VolumeCalculator />
       </section>
 
       <footer className="colophon">
